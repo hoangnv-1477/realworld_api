@@ -13,11 +13,18 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='register')
     def register(self, request):
         user_data_from_request = request.data.get('user', {})
+
         serializer = self.get_serializer(data=user_data_from_request)
+
         serializer.is_valid(raise_exception=True)
+
         user = serializer.save()
 
+        response_data = {
+            'user': serializer.data.get('user_data')
+        }
+ 
         return Response(
-          {"message": f"User '{user.username}' registered successfully!", "id": user.id},
+          response_data,
           status=status.HTTP_201_CREATED
         )
