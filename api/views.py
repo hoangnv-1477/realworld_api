@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
 from .models import User
-from .serializers import RegistrationSerializer
+from .serializers import RegistrationSerializer, LoginSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -28,3 +28,15 @@ class UserViewSet(viewsets.GenericViewSet):
           response_data,
           status=status.HTTP_201_CREATED
         )
+
+    @action(detail=False, methods=['post'], url_path='users/login')
+    def login(self, request):
+        serializer = LoginSerializer(data=request.data.get('user', {}))
+
+        serializer.is_valid(raise_exception=True)
+
+        response_data = {
+            'user': serializer.data.get('user_data')
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)

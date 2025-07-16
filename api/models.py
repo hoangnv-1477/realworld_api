@@ -6,6 +6,12 @@ from django.conf import settings
 class User(AbstractUser):
     objects = UserManager()
 
+    email = models.EmailField(unique=True, blank=False, null=False)
+
+    USERNAME_FIELD = 'email'
+
+    REQUIRED_FIELDS = ['username']
+
     def __str__(self):
         return self.username
 
