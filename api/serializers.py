@@ -1,7 +1,9 @@
 from rest_framework import serializers
-from .models import User, Profile
+from .models import User, Profile, Article, Tag
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from django.utils.text import slugify
+import uuid
 
 # Serializer for the current user
 class CurrentUserSerializer(serializers.ModelSerializer):
@@ -87,3 +89,65 @@ class LoginSerializer(serializers.Serializer):
         user_data['token'] = access_token
 
         return user_data
+
+class AuthorProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    bio = serializers.CharField(allow_blank=True, required=False)
+    image = serializers.URLField(allow_blank=True, required=False)
+    following = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = ['username', 'bio', 'image', 'following']
+
+    def get_following(self, obj):
+        return False
+
+class ArticleSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=255, required=True)
+    description = serializers.CharField(max_length=255, required=True)
+    body = serializers.CharField(required=True)
+    tagList = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+
+    slug = serializers.CharField(read_only=True)
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
+    favorited = serializers.SerializerMethodField()
+    favoritesCount = serializers.SerializerMethodField()
+    author = AuthorProfileSerializer(read_only=True)
+
+    class Meta:
+        model = Article
+
+        fields = [
+            'slug', 'title', 'description', 'body', 'tagList',
+            'createdAt', 'updatedAt', 'favorited', 'favoritesCount', 'author'
+        ]
+
+        read_only_fields = ['slug', 'createdAt', 'updatedAt', 'favorited', 'favoritesCount', 'author']
+
+    def create(self, validated_data):
+        tag_names = validated_data.pop('tagList', [])
+        title = validated_data.get('title')
+        base_slug = slugify(title)
+        validated_data['slug'] = f"{base_slug}"
+
+        while Article.objects.filter(slug=validated_data['slug']).exists():
+            unique_id = str(uuid.uuid4()).split('-')[0]
+            validated_data['slug'] = f"{base_slug}-{unique_id}"
+
+        article = Article.objects.create(**validated_data)
+
+        for tag_name in tag_names:
+            tag, created = Tag.objects.get_or_create(name=tag_name)
+            article.tags.add(tag)
+
+        return article
+
+    def get_favorited(self, obj):
+        if self.context.get('request') and self.context['request'].user.is_authenticated:
+            return obj.favorited_by.filter(id=self.context['request'].user.id).exists()
+        return False
+
+    def get_favoritesCount(self, obj):
+        return obj.favorited_by.count()

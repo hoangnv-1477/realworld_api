@@ -37,11 +37,11 @@ INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
+    'rest_framework_simplejwt',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt',
     'api'
 ]
 
@@ -90,7 +90,7 @@ SIMPLE_JWT = {
     'LEEWAY': 0,
 
     'AUTH_HEADER_TYPES': ('Token',),
-    'AUTH_HEADER_NAME': 'Authorization',
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
     'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
