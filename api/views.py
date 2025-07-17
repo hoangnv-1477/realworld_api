@@ -1,10 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from .models import User
-from .serializers import RegistrationSerializer, LoginSerializer
+from .models import User, Article
+from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -40,3 +40,24 @@ class UserViewSet(viewsets.GenericViewSet):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+class ArticleViewSet(viewsets.ModelViewSet):
+    queryset = Article.objects.all()
+    serializer_class = ArticleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        article_data = request.data.get('article', {})
+        serializer = self.get_serializer(data=article_data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response({'article': serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context

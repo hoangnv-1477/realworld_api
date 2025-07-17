@@ -19,11 +19,18 @@ class User(AbstractUser):
         db_table = 'auth_user'
         verbose_name = 'User'
         verbose_name_plural = 'Users'
+
 # Profile model
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(blank=True, null=True)
     image = models.URLField(blank=True, null=True)
+    follows = models.ManyToManyField(
+        'self',
+        symmetrical=False,
+        related_name='followed_by',
+        blank=True
+    )
 
     def __str__(self):
         return self.user.username
@@ -60,10 +67,16 @@ class Tag(models.Model):
 # Article model
 class Article(models.Model):
     title = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True, blank=True)
     description = models.TextField()
     body = models.TextField()
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='articles')
     tags = models.ManyToManyField(Tag, related_name='articles', blank=True)
+    favorited_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='favorite_articles',
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
