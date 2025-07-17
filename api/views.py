@@ -46,6 +46,30 @@ class ArticleViewSet(viewsets.ModelViewSet):
     serializer_class = ArticleSerializer
     permission_classes = [IsAuthenticated]
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        author = request.query_params.get('author')
+        tag = request.query_params.get('tag')
+        favorited = request.query_params.get('favorited')
+        limit = int(request.query_params.get('limit', 20))
+        offset = int(request.query_params.get('offset', 0))
+
+        if author:
+            queryset = queryset.filter(author__username=author)
+        if tag:
+            queryset = queryset.filter(tags__tag=tag)
+        if favorited:
+            queryset = queryset.filter(favorited_by__username=favorited)
+
+        articles_count = queryset.count()
+        queryset = queryset[offset:offset+limit]
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response({
+            'articles': serializer.data,
+            'articlesCount': articles_count
+        }, status=status.HTTP_200_OK)
+
     def create(self, request, *args, **kwargs):
         article_data = request.data.get('article', {})
         serializer = self.get_serializer(data=article_data)

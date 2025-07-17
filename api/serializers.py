@@ -114,7 +114,7 @@ class ArticleSerializer(serializers.ModelSerializer):
     updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
     favorited = serializers.SerializerMethodField()
     favoritesCount = serializers.SerializerMethodField()
-    author = AuthorProfileSerializer(read_only=True)
+    author = serializers.SerializerMethodField()
 
     class Meta:
         model = Article
@@ -126,6 +126,9 @@ class ArticleSerializer(serializers.ModelSerializer):
 
         read_only_fields = ['slug', 'createdAt', 'updatedAt', 'favorited', 'favoritesCount', 'author']
 
+    def get_author(self, obj):
+        profile = getattr(obj.author, 'profile', None)
+        return AuthorProfileSerializer(profile).data if profile else None
     def create(self, validated_data):
         tag_names = validated_data.pop('tagList', [])
         title = validated_data.get('title')
