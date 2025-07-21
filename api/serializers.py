@@ -107,7 +107,7 @@ class ArticleSerializer(serializers.ModelSerializer):
     title = serializers.CharField(max_length=255, required=True)
     description = serializers.CharField(max_length=255, required=True)
     body = serializers.CharField(required=True)
-    tagList = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+    tagList = serializers.SerializerMethodField()
 
     slug = serializers.CharField(read_only=True)
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
@@ -129,8 +129,14 @@ class ArticleSerializer(serializers.ModelSerializer):
     def get_author(self, obj):
         profile = getattr(obj.author, 'profile', None)
         return AuthorProfileSerializer(profile).data if profile else None
+
+    def to_internal_value(self, data):
+        if 'tagList' in data:
+            self._tag_list = data['tagList']
+        return super().to_internal_value(data)
+
     def create(self, validated_data):
-        tag_names = validated_data.pop('tagList', [])
+        tag_names = getattr(self, '_tag_list', [])
         title = validated_data.get('title')
         base_slug = slugify(title)
         validated_data['slug'] = f"{base_slug}"
@@ -147,6 +153,31 @@ class ArticleSerializer(serializers.ModelSerializer):
 
         return article
 
+    def update(self, instance, validated_data):
+        tag_names = getattr(self, '_tag_list', None)
+        if 'title' in validated_data and validated_data['title'] != instance.title:
+            base_slug = slugify(validated_data['title'])
+            new_slug = base_slug
+
+            while Article.objects.filter(slug=new_slug).exists():
+                unique_id = str(uuid.uuid4()).split('-')[0]
+                new_slug = f"{base_slug}-{unique_id}"
+
+            validated_data['slug'] = new_slug
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+
+        if tag_names is not None:
+            instance.tags.clear()
+            for tag_name in tag_names:
+                tag, created = Tag.objects.get_or_create(name=tag_name)
+                instance.tags.add(tag)
+        
+        return instance
+
     def get_favorited(self, obj):
         if self.context.get('request') and self.context['request'].user.is_authenticated:
             return obj.favorited_by.filter(id=self.context['request'].user.id).exists()
@@ -154,3 +185,6 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     def get_favoritesCount(self, obj):
         return obj.favorited_by.count()
+
+    def get_tagList(self, obj):
+        return [tag.name for tag in obj.tags.all()]
