@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Profile, Article, Tag
+from .models import User, Profile, Article, Tag, Comment
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.utils.text import slugify
@@ -188,3 +188,20 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     def get_tagList(self, obj):
         return [tag.name for tag in obj.tags.all()]
+
+class CommentSerializer(serializers.ModelSerializer):
+    body = serializers.CharField(required=True)
+
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
+    author = AuthorProfileSerializer(source='author.profile', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'body', 'createdAt', 'updatedAt', 'author']
+        read_only_fields = ['id', 'createdAt', 'updatedAt', 'author']
+
+    def create(self, validated_data):
+        # article và author sẽ được set từ view
+        return Comment.objects.create(**validated_data)

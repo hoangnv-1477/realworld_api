@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import User, Article
-from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer
+from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -106,6 +106,36 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
         self.perform_destroy(article)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get', 'post'], url_path='comments')
+    def comment(self, request, slug=None):
+        article = self.get_object()
+
+        if request.method == 'POST':
+            comment_data = request.data.get('comment', {})
+
+            serializer = CommentSerializer(data=comment_data)
+            serializer.is_valid(raise_exception=True)
+
+            comment = serializer.save(
+                article=article,
+                author=request.user
+            )
+
+            response_serializer = CommentSerializer(comment)
+
+            return Response(
+                {'comment': response_serializer.data}, 
+                status=status.HTTP_201_CREATED
+            )
+        elif request.method == 'GET':
+            comments = article.comments.all().order_by('-created_at')
+            
+            serializer = CommentSerializer(comments, many=True)
+            return Response(
+                {'comments': serializer.data}, 
+                status=status.HTTP_200_OK
+            )
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
