@@ -2,9 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User, Article
-from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer
+from .models import User, Article, Tag
+from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer, CurrentUserSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -40,6 +41,19 @@ class UserViewSet(viewsets.GenericViewSet):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='user', permission_classes=[IsAuthenticated])
+    def get_current_user(self, request):
+        user = request.user
+        
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        
+        serializer = CurrentUserSerializer(user)
+        user_data = serializer.data.copy()
+        user_data['token'] = access_token
+        
+        return Response({'user': user_data}, status=status.HTTP_200_OK)
 
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
@@ -147,3 +161,14 @@ class ArticleViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+class TagViewSet(viewsets.GenericViewSet):
+    permission_classes = [AllowAny]
+    queryset = Tag.objects.all()
+
+    def list(self, request):
+        """
+        GET /api/tags - Get all tags
+        """
+        tags = self.get_queryset().values_list('name', flat=True).order_by('name')
+        return Response({'tags': list(tags)}, status=status.HTTP_200_OK)
