@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User, Article, Tag
-from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer, CurrentUserSerializer
+from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer, CurrentUserSerializer, UpdateUserSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -44,6 +44,11 @@ class UserViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'], url_path='user', permission_classes=[IsAuthenticated])
     def get_current_user(self, request):
+        if not request.user.is_authenticated:
+            return Response(
+                {'detail': 'Authentication credentials were not provided.'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
         user = request.user
         
         refresh = RefreshToken.for_user(user)
@@ -54,6 +59,29 @@ class UserViewSet(viewsets.GenericViewSet):
         user_data['token'] = access_token
         
         return Response({'user': user_data}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['put'], url_path='user', permission_classes=[IsAuthenticated])
+    def update_user(self, request):
+        if not request.user.is_authenticated:
+            return Response(
+                {'detail': 'Authentication credentials were not provided.'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        user = request.user
+        user_data = request.data.get('user', {})
+        
+        serializer = UpdateUserSerializer(user, data=user_data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_user = serializer.save()
+
+        refresh = RefreshToken.for_user(updated_user)
+        access_token = str(refresh.access_token)
+        
+        response_serializer = CurrentUserSerializer(updated_user)
+        user_response_data = response_serializer.data.copy()
+        user_response_data['token'] = access_token
+        
+        return Response({'user': user_response_data}, status=status.HTTP_200_OK)
 
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
@@ -150,6 +178,32 @@ class ArticleViewSet(viewsets.ModelViewSet):
                 {'comments': serializer.data}, 
                 status=status.HTTP_200_OK
             )
+
+    @action(detail=True, methods=['post', 'delete'], url_path='favorite')
+    def toggle_favorite(self, request, slug=None):
+        article = self.get_object()
+        user = request.user
+
+        if request.method == 'POST':
+            if article.favorited_by.filter(id=user.id).exists():
+                return Response(
+                    {'message': 'Article already favorited'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            article.favorited_by.add(user)
+
+        elif request.method == 'DELETE':
+            if not article.favorited_by.filter(id=user.id).exists():
+                return Response(
+                    {'message': 'Article not favorited'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            article.favorited_by.remove(user)
+
+        serializer = self.get_serializer(article, context={'request': request})
+        return Response({'article': serializer.data}, status=status.HTTP_200_OK)
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)

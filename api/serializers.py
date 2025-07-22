@@ -205,3 +205,45 @@ class CommentSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # article và author sẽ được set từ view
         return Comment.objects.create(**validated_data)
+
+class UpdateUserSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=False)
+    username = serializers.CharField(max_length=150, required=False)
+    password = serializers.CharField(write_only=True, required=False)
+    bio = serializers.CharField(source='profile.bio', allow_blank=True, required=False)
+    image = serializers.URLField(source='profile.image', allow_blank=True, required=False)
+    
+    class Meta:
+        model = User
+        fields = ['email', 'username', 'password', 'bio', 'image']
+    
+    def validate_email(self, value):
+        user = self.instance
+        if User.objects.filter(email=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return value
+    
+    def validate_username(self, value):
+        user = self.instance
+        if User.objects.filter(username=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+    
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop('profile', {})
+        
+        if 'password' in validated_data:
+            instance.set_password(validated_data.pop('password'))
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        if profile_data:
+            profile = instance.profile
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+        
+        return instance
