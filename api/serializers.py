@@ -101,6 +101,13 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
         fields = ['username', 'bio', 'image', 'following']
 
     def get_following(self, obj):
+        request = self.context.get('request')
+
+        if request and request.user.is_authenticated:
+            current_user_profile = getattr(request.user, 'profile', None)
+            if current_user_profile:
+                return current_user_profile.follows.filter(id=obj.id).exists()
+
         return False
 
 class ArticleSerializer(serializers.ModelSerializer):
@@ -128,7 +135,9 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     def get_author(self, obj):
         profile = getattr(obj.author, 'profile', None)
-        return AuthorProfileSerializer(profile).data if profile else None
+        if profile:
+            return AuthorProfileSerializer(profile, context=self.context).data
+        return None
 
     def to_internal_value(self, data):
         if 'tagList' in data:
@@ -191,16 +200,21 @@ class ArticleSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     body = serializers.CharField(required=True)
-
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
     updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
-    author = AuthorProfileSerializer(source='author.profile', read_only=True)
+    author = serializers.SerializerMethodField()
     id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Comment
         fields = ['id', 'body', 'createdAt', 'updatedAt', 'author']
         read_only_fields = ['id', 'createdAt', 'updatedAt', 'author']
+
+    def get_author(self, obj):
+        profile = getattr(obj.author, 'profile', None)
+        if profile:
+            return AuthorProfileSerializer(profile, context=self.context).data
+        return None
 
     def create(self, validated_data):
         # article và author sẽ được set từ view
@@ -247,3 +261,23 @@ class UpdateUserSerializer(serializers.ModelSerializer):
             profile.save()
         
         return instance
+
+class ProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    bio = serializers.CharField(allow_blank=True, required=False)
+    image = serializers.URLField(allow_blank=True, required=False)
+    following = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = ['username', 'bio', 'image', 'following']
+
+    def get_following(self, obj):
+        request = self.context.get('request')
+
+        if request and request.user.is_authenticated:
+            current_user_profile = getattr(request.user, 'profile', None)
+            if current_user_profile:
+                return current_user_profile.follows.filter(id=obj.id).exists()
+
+        return False
