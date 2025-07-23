@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User, Article, Tag
-from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer, CurrentUserSerializer, UpdateUserSerializer
+from .models import User, Article, Tag, Profile
+from .serializers import RegistrationSerializer, LoginSerializer, ArticleSerializer, CommentSerializer, CurrentUserSerializer, UpdateUserSerializer, ProfileSerializer
 
 class UserViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
@@ -173,7 +173,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
         elif request.method == 'GET':
             comments = article.comments.all().order_by('-created_at')
             
-            serializer = CommentSerializer(comments, many=True)
+            serializer = CommentSerializer(comments, many=True, context={'request': request})
             return Response(
                 {'comments': serializer.data}, 
                 status=status.HTTP_200_OK
@@ -226,3 +226,61 @@ class TagViewSet(viewsets.GenericViewSet):
         """
         tags = self.get_queryset().values_list('name', flat=True).order_by('name')
         return Response({'tags': list(tags)}, status=status.HTTP_200_OK)
+
+class ProfileViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProfileSerializer
+    lookup_field = 'user__username'
+    lookup_url_kwarg = 'username'
+
+    def get_queryset(self):
+        return Profile.objects.select_related('user').all()
+
+    def retrieve(self, request, username=None):
+        try:
+            profile = Profile.objects.select_related('user').get(user__username=username)
+        except Profile.DoesNotExist:
+            return Response(
+                {'detail': 'Profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = self.get_serializer(profile, context={'request': request})
+        return Response({'profile': serializer.data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post', 'delete'], url_path='follow')
+    def toggle_follow(self, request, username=None):
+        try:
+            target_profile = Profile.objects.select_related('user').get(user__username=username)
+        except Profile.DoesNotExist:
+            return Response(
+                {'detail': 'Profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        current_user_profile = request.user.profile
+        
+        if target_profile.user == request.user:
+            return Response(
+                {'detail': 'You cannot follow/unfollow yourself'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if request.method == 'POST':
+            if current_user_profile.follows.filter(id=target_profile.id).exists():
+                return Response(
+                    {'detail': 'Already following this user'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            current_user_profile.follows.add(target_profile)
+            
+        elif request.method == 'DELETE':
+            if not current_user_profile.follows.filter(id=target_profile.id).exists():
+                return Response(
+                    {'detail': 'Not following this user'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            current_user_profile.follows.remove(target_profile)
+        
+        serializer = self.get_serializer(target_profile, context={'request': request})
+        return Response({'profile': serializer.data}, status=status.HTTP_200_OK)
